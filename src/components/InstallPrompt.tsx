@@ -89,7 +89,7 @@ export function InstallPrompt() {
   if (!visible || isPublic) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-[100] p-3 sm:left-auto sm:right-4 sm:bottom-4 sm:w-96 sm:p-0">
+    <div className="fixed inset-x-0 top-0 z-[100] p-3 sm:left-auto sm:right-4 sm:top-4 sm:w-96 sm:p-0">
       <div className="rounded-xl border border-border/60 bg-card p-4 shadow-xl">
         <div className="flex items-start gap-3">
           <img
