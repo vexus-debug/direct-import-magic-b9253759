@@ -235,7 +235,7 @@ export function AICopilotPanel({ open, onClose, inline = false }: AICopilotPanel
       if (err?.message?.includes("429") || err?.context?.status === 429) {
         errorMsg = "Rate limited — please wait a moment and try again.";
       } else if (err?.message?.includes("402") || err?.context?.status === 402) {
-        errorMsg = "AI credits exhausted. Please add credits to your Lovable workspace.";
+        errorMsg = "AI credits are currently unavailable. Please contact your Clinexus administrator.";
       } else if (err?.message) {
         errorMsg = err.message;
       }
