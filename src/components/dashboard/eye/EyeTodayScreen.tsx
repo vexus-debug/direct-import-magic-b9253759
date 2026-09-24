@@ -1,41 +1,38 @@
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useOrg } from "@/hooks/useOrg";
 import { useSurgeryBookings } from "@/hooks/eye/useEye";
 import { useTodayFlow, usePickupOrders, useUnpaidInvoices, useFrames, useLenses, FLOW_STAGES, todayISO } from "@/hooks/eye/useEyeOps";
 import { hasPageAccess } from "@/config/roleAccess";
-import {
-  Activity, Stethoscope, Glasses, CreditCard, Scissors, Package,
-  ArrowRight, ArrowUpRight, UserPlus, BellRing, AlertTriangle, Sunrise,
-} from "lucide-react";
+import { ArrowRight, ArrowUpRight, UserPlus } from "lucide-react";
 
 const ngn = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 });
 
-const fadeUp = {
-  initial: { opacity: 0, y: 10 },
-  animate: { opacity: 1, y: 0 },
+type Tone = "default" | "success" | "warning" | "info" | "destructive";
+
+const toneText: Record<Tone, string> = {
+  default: "text-foreground",
+  success: "text-success",
+  warning: "text-warning",
+  info: "text-info",
+  destructive: "text-destructive",
 };
 
-interface TileProps {
+const toneBar: Record<Tone, string> = {
+  default: "bg-foreground/70",
+  success: "bg-success",
+  warning: "bg-warning",
+  info: "bg-info",
+  destructive: "bg-destructive",
+};
+
+interface MetricProps {
   path: string;
-  title: string;
+  label: string;
   value: number | string;
   sub: string;
-  Icon: any;
-  tone: "primary" | "success" | "warning" | "info" | "destructive";
-  index: number;
+  tone?: Tone;
 }
-
-const toneStyles: Record<TileProps["tone"], { chip: string; bar: string }> = {
-  primary: { chip: "bg-primary/10 text-primary", bar: "from-primary/60 to-primary" },
-  success: { chip: "bg-success/10 text-success", bar: "from-success/60 to-success" },
-  warning: { chip: "bg-warning/10 text-warning", bar: "from-warning/60 to-warning" },
-  info: { chip: "bg-info/10 text-info", bar: "from-info/60 to-info" },
-  destructive: { chip: "bg-destructive/10 text-destructive", bar: "from-destructive/60 to-destructive" },
-};
 
 export function EyeTodayScreen() {
   const { basePath, currentOrg } = useOrg();
@@ -60,145 +57,222 @@ export function EyeTodayScreen() {
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const dateStr = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
 
-  const tile = (props: TileProps) =>
-    can(props.path) && (
-      <motion.div key={props.path} {...fadeUp} transition={{ duration: 0.3, delay: 0.05 * props.index }}>
-        <Link to={`${basePath}/${props.path}`} className="group block h-full">
-          <Card className="relative h-full overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-primary/30">
-            <span className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${toneStyles[props.tone].bar}`} />
-            <CardContent className="flex items-start justify-between gap-3 p-4 pt-5">
-              <div className="min-w-0">
-                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{props.title}</p>
-                <p className="mt-1.5 text-3xl font-bold tracking-tight tabular-nums">{props.value}</p>
-                <p className="mt-1 truncate text-xs text-muted-foreground">{props.sub}</p>
-              </div>
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${toneStyles[props.tone].chip}`}>
-                <props.Icon className="h-5 w-5" />
-              </div>
-            </CardContent>
-            <ArrowUpRight className="absolute bottom-3 right-3 h-3.5 w-3.5 text-muted-foreground/0 transition-all group-hover:text-muted-foreground" />
-          </Card>
-        </Link>
-      </motion.div>
-    );
+  const metrics = [
+    { path: "eye/flow", label: "In clinic now", value: active.length, sub: `${flow.length - active.length} finished today`, tone: "default" },
+    { path: "eye/pickup", label: "Glasses ready", value: ready.length, sub: `${notTold.length} unnotified · ${atLab.length} at lab`, tone: "success" },
+    { path: "billing", label: "Unpaid bills", value: unpaid.length, sub: ngn.format(unpaidTotal), tone: (unpaid.length ? "destructive" : "default") as Tone },
+    { path: "eye/surgery", label: "Surgeries today", value: todaySurg.length, sub: todaySurg.map((s) => s.procedure_name).slice(0, 2).join(", ") || "None booked", tone: "info" },
+    { path: "eye/stock", label: "Low stock items", value: lowStock, sub: "Frames & lenses to reorder", tone: (lowStock ? "warning" : "default") as Tone },
+  ].filter((m) => can(m.path)) as MetricProps[];
 
-  const needsAttention = [
+  const stageData = FLOW_STAGES.map((st) => ({
+    ...st,
+    list: active.filter((f) => f.stage === st.key),
+  }));
+  const maxStage = Math.max(1, ...stageData.map((s) => s.list.length));
+
+  const attention = [
     notTold.length > 0 && can("eye/pickup") && {
-      Icon: BellRing, text: `${notTold.length} ${notTold.length === 1 ? "pair of glasses is" : "pairs of glasses are"} ready but the patient hasn't been told`,
-      to: `${basePath}/eye/pickup`, tone: "text-warning",
+      label: "Ready glasses not collected",
+      detail: `${notTold.length} ${notTold.length === 1 ? "patient" : "patients"} not yet notified`,
+      to: `${basePath}/eye/pickup`,
+      tone: "warning" as Tone,
     },
     unpaid.length > 0 && can("billing") && {
-      Icon: CreditCard, text: `${unpaid.length} unpaid ${unpaid.length === 1 ? "bill" : "bills"} worth ${ngn.format(unpaidTotal)}`,
-      to: `${basePath}/billing`, tone: "text-destructive",
+      label: "Outstanding balances",
+      detail: `${unpaid.length} ${unpaid.length === 1 ? "bill" : "bills"} · ${ngn.format(unpaidTotal)}`,
+      to: `${basePath}/billing`,
+      tone: "destructive" as Tone,
     },
     lowStock > 0 && can("eye/stock") && {
-      Icon: AlertTriangle, text: `${lowStock} frames or lenses are below reorder level`,
-      to: `${basePath}/eye/stock`, tone: "text-warning",
+      label: "Stock below reorder level",
+      detail: `${lowStock} ${lowStock === 1 ? "item" : "items"} need reordering`,
+      to: `${basePath}/eye/stock`,
+      tone: "warning" as Tone,
     },
-  ].filter(Boolean) as { Icon: any; text: string; to: string; tone: string }[];
+  ].filter(Boolean) as { label: string; detail: string; to: string; tone: Tone }[];
+
+  const pickupTotal = ready.length + atLab.length;
+  const readyPct = pickupTotal ? Math.round((ready.length / pickupTotal) * 100) : 0;
 
   return (
-    <div className="space-y-6">
-      {/* Greeting banner */}
-      <motion.div {...fadeUp} transition={{ duration: 0.35 }}>
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-clinic-navy via-secondary to-primary p-6 text-primary-foreground sm:p-8">
-          <Sunrise className="pointer-events-none absolute -right-6 -top-6 h-40 w-40 opacity-10" />
-          <p className="text-xs font-medium uppercase tracking-widest opacity-70">{dateStr}</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{greeting} — here's the clinic at a glance</h1>
-          <p className="mt-1.5 max-w-xl text-sm opacity-80">
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">{dateStr}</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">{greeting}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             {active.length > 0
-              ? `${active.length} ${active.length === 1 ? "patient is" : "patients are"} in the clinic right now.`
-              : "No patients in the clinic yet. A fresh start!"}
+              ? `${active.length} ${active.length === 1 ? "patient" : "patients"} currently in the clinic`
+              : "No patients in the clinic yet"}
           </p>
-          {can("eye/flow") && (
-            <Button size="sm" variant="secondary" className="mt-4 bg-white/15 text-white hover:bg-white/25 border-0" asChild>
-              <Link to={`${basePath}/eye/flow`}><UserPlus className="mr-1.5 h-4 w-4" />Check in a patient</Link>
-            </Button>
-          )}
         </div>
-      </motion.div>
-
-      {/* Stat tiles */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {tile({ path: "eye/flow", title: "In the clinic now", value: active.length, sub: `${flow.length - active.length} finished today`, Icon: Activity, tone: "primary", index: 1 })}
-        {tile({ path: "eye/pickup", title: "Glasses ready", value: ready.length, sub: `${notTold.length} not yet told · ${atLab.length} at lab`, Icon: Glasses, tone: "success", index: 2 })}
-        {tile({ path: "billing", title: "Unpaid bills", value: unpaid.length, sub: ngn.format(unpaidTotal), Icon: CreditCard, tone: "destructive", index: 3 })}
-        {tile({ path: "eye/surgery", title: "Surgeries today", value: todaySurg.length, sub: todaySurg.map((s) => s.procedure_name).slice(0, 2).join(", ") || "None booked", Icon: Scissors, tone: "info", index: 4 })}
-        {tile({ path: "eye/stock", title: "Low stock", value: lowStock, sub: "Frames and lenses to reorder", Icon: Package, tone: "warning", index: 5 })}
+        {can("eye/flow") && (
+          <Button size="sm" asChild>
+            <Link to={`${basePath}/eye/flow`}>
+              <UserPlus className="mr-1.5 h-4 w-4" />Check in a patient
+            </Link>
+          </Button>
+        )}
       </div>
 
-      {/* Needs attention */}
-      {needsAttention.length > 0 && (
-        <motion.div {...fadeUp} transition={{ duration: 0.3, delay: 0.25 }}>
-          <Card className="border-warning/40 bg-warning/5">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <BellRing className="h-4 w-4 text-warning" /> Needs your attention
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1">
-              {needsAttention.map((a, i) => (
-                <Link key={i} to={a.to} className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-warning/10">
-                  <a.Icon className={`h-4 w-4 shrink-0 ${a.tone}`} />
-                  <span className="flex-1">{a.text}</span>
-                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-                </Link>
-              ))}
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
+      {/* Metric strip */}
+      <div className="grid grid-cols-2 divide-x divide-y divide-border overflow-hidden rounded-lg border border-border bg-card sm:grid-cols-3 lg:grid-cols-5 lg:divide-y-0">
+        {metrics.map((m) => (
+          <Link
+            key={m.path}
+            to={`${basePath}/${m.path}`}
+            className="group relative px-4 py-4 transition-colors hover:bg-accent/50"
+          >
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{m.label}</p>
+            <p className={`mt-1 text-3xl font-semibold tabular-nums tracking-tight ${toneText[m.tone ?? "default"]}`}>
+              {m.value}
+            </p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">{m.sub}</p>
+            <ArrowUpRight className="absolute right-3 top-3 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+          </Link>
+        ))}
+      </div>
 
-      {/* Patient progress pipeline */}
-      {can("eye/flow") && (
-        <motion.div {...fadeUp} transition={{ duration: 0.3, delay: 0.3 }}>
-          <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* Patient flow */}
+        {can("eye/flow") && (
+          <section className="lg:col-span-2">
+            <div className="mb-4 flex items-center justify-between">
               <div>
-                <CardTitle className="text-base">Patient progress</CardTitle>
-                <p className="mt-0.5 text-xs text-muted-foreground">Where each patient is right now</p>
+                <h2 className="text-base font-semibold tracking-tight">Patient flow</h2>
+                <p className="text-xs text-muted-foreground">Live position of every patient in the clinic</p>
               </div>
               <Button variant="ghost" size="sm" asChild>
-                <Link to={`${basePath}/eye/flow`}>Open board <ArrowRight className="ml-1 h-3 w-3" /></Link>
+                <Link to={`${basePath}/eye/flow`}>
+                  Open board <ArrowRight className="ml-1 h-3 w-3" />
+                </Link>
               </Button>
-            </CardHeader>
-            <CardContent className="grid gap-2 sm:grid-cols-5">
-              {FLOW_STAGES.map((st, i) => {
-                const list = active.filter((f) => f.stage === st.key);
-                const isBusy = list.length > 0;
-                return (
+            </div>
+
+            {/* Distribution bar */}
+            <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+              {stageData.map((s, i) =>
+                s.list.length > 0 ? (
                   <div
-                    key={st.key}
-                    className={`rounded-xl border p-3 transition-colors ${isBusy ? "border-primary/30 bg-accent/50" : "border-border/50"}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-1.5 text-sm font-medium">
-                        <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold ${isBusy ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                          {i + 1}
-                        </span>
-                        {st.label}
-                      </span>
-                      <Badge variant={isBusy ? "default" : "secondary"}>{list.length}</Badge>
-                    </div>
-                    <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-                      {list.slice(0, 4).map((f) => (
-                        <li key={f.id} className="truncate">
-                          {st.key === "doctor" && can("eye/visit") ? (
-                            <Link className="hover:underline" to={`${basePath}/eye/visit?patient=${f.patient_id}`}>
-                              <Stethoscope className="mr-1 inline h-3 w-3" />{f.patients?.first_name} {f.patients?.last_name}
-                            </Link>
-                          ) : <>{f.patients?.first_name} {f.patients?.last_name}</>}
-                        </li>
-                      ))}
-                      {list.length === 0 && <li className="italic opacity-60">Nobody here</li>}
-                    </ul>
+                    key={s.key}
+                    className={toneBar[(["default", "info", "default", "success", "warning"] as Tone[])[i % 5]]}
+                    style={{ width: `${(s.list.length / active.length) * 100}%` }}
+                  />
+                ) : null
+              )}
+            </div>
+
+            <div className="mt-4 divide-y divide-border rounded-lg border border-border bg-card">
+              {stageData.map((s, i) => (
+                <div key={s.key} className="flex items-center gap-4 px-4 py-3">
+                  <span className="w-6 text-xs font-medium tabular-nums text-muted-foreground">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="w-32 shrink-0 text-sm font-medium">{s.label}</span>
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={`h-full rounded-full ${s.list.length ? "bg-primary" : ""}`}
+                      style={{ width: `${(s.list.length / maxStage) * 100}%` }}
+                    />
                   </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
+                  <span className="w-8 text-right text-sm font-semibold tabular-nums">{s.list.length}</span>
+                  <span className="hidden w-48 truncate text-xs text-muted-foreground md:block">
+                    {s.list.length === 0
+                      ? "—"
+                      : s.list.slice(0, 3).map((f) => `${f.patients?.first_name ?? ""} ${f.patients?.last_name ?? ""}`.trim()).join(", ")}
+                  </span>
+                  {s.key === "doctor" && can("eye/visit") && s.list[0] && (
+                    <Link
+                      to={`${basePath}/eye/visit?patient=${s.list[0].patient_id}`}
+                      className="shrink-0 text-xs font-medium text-primary hover:underline"
+                    >
+                      Open visit
+                    </Link>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Right column */}
+        <div className="space-y-8">
+          {/* Optical lab status */}
+          {can("eye/pickup") && (
+            <section>
+              <h2 className="mb-4 text-base font-semibold tracking-tight">Optical orders</h2>
+              <div className="rounded-lg border border-border bg-card p-4">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-2xl font-semibold tabular-nums">{readyPct}%</span>
+                  <span className="text-xs text-muted-foreground">{ready.length} of {pickupTotal} orders ready</span>
+                </div>
+                <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-success" style={{ width: `${readyPct}%` }} />
+                </div>
+                <div className="mt-4 space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                      <span className="h-2 w-2 rounded-full bg-success" />Ready for pickup
+                    </span>
+                    <span className="font-medium tabular-nums">{ready.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                      <span className="h-2 w-2 rounded-full bg-info" />At the lab
+                    </span>
+                    <span className="font-medium tabular-nums">{atLab.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                      <span className="h-2 w-2 rounded-full bg-warning" />Patient not notified
+                    </span>
+                    <span className="font-medium tabular-nums">{notTold.length}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Needs attention */}
+          {attention.length > 0 && (
+            <section>
+              <h2 className="mb-4 text-base font-semibold tracking-tight">Needs attention</h2>
+              <div className="divide-y divide-border rounded-lg border border-border bg-card">
+                {attention.map((a, i) => (
+                  <Link key={i} to={a.to} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/50">
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${toneBar[a.tone]}`} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{a.label}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{a.detail}</span>
+                    </span>
+                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Surgeries today */}
+          {can("eye/surgery") && todaySurg.length > 0 && (
+            <section>
+              <h2 className="mb-4 text-base font-semibold tracking-tight">Today's surgeries</h2>
+              <div className="divide-y divide-border rounded-lg border border-border bg-card">
+                {todaySurg.map((s) => (
+                  <Link key={s.id} to={`${basePath}/eye/surgery`} className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-accent/50">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">{s.procedure_name}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {s.patients?.first_name} {s.patients?.last_name}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs font-medium uppercase tracking-wider text-muted-foreground">{s.status}</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
