@@ -57,13 +57,13 @@ export function EyeTodayScreen() {
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const dateStr = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
 
-  const metrics: MetricProps[] = [
+  const metrics = [
     { path: "eye/flow", label: "In clinic now", value: active.length, sub: `${flow.length - active.length} finished today`, tone: "default" },
     { path: "eye/pickup", label: "Glasses ready", value: ready.length, sub: `${notTold.length} unnotified · ${atLab.length} at lab`, tone: "success" },
     { path: "billing", label: "Unpaid bills", value: unpaid.length, sub: ngn.format(unpaidTotal), tone: (unpaid.length ? "destructive" : "default") as Tone },
     { path: "eye/surgery", label: "Surgeries today", value: todaySurg.length, sub: todaySurg.map((s) => s.procedure_name).slice(0, 2).join(", ") || "None booked", tone: "info" },
     { path: "eye/stock", label: "Low stock items", value: lowStock, sub: "Frames & lenses to reorder", tone: (lowStock ? "warning" : "default") as Tone },
-  ].filter((m) => can(m.path));
+  ].filter((m) => can(m.path)) as MetricProps[];
 
   const stageData = FLOW_STAGES.map((st) => ({
     ...st,
