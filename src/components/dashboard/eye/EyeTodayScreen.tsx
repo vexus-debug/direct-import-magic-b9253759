@@ -60,9 +60,9 @@ export function EyeTodayScreen() {
   const metrics: MetricProps[] = [
     { path: "eye/flow", label: "In clinic now", value: active.length, sub: `${flow.length - active.length} finished today`, tone: "default" },
     { path: "eye/pickup", label: "Glasses ready", value: ready.length, sub: `${notTold.length} unnotified · ${atLab.length} at lab`, tone: "success" },
-    { path: "billing", label: "Unpaid bills", value: unpaid.length, sub: ngn.format(unpaidTotal), tone: unpaid.length ? "destructive" : "default" },
+    { path: "billing", label: "Unpaid bills", value: unpaid.length, sub: ngn.format(unpaidTotal), tone: (unpaid.length ? "destructive" : "default") as Tone },
     { path: "eye/surgery", label: "Surgeries today", value: todaySurg.length, sub: todaySurg.map((s) => s.procedure_name).slice(0, 2).join(", ") || "None booked", tone: "info" },
-    { path: "eye/stock", label: "Low stock items", value: lowStock, sub: "Frames & lenses to reorder", tone: lowStock ? "warning" : "default" },
+    { path: "eye/stock", label: "Low stock items", value: lowStock, sub: "Frames & lenses to reorder", tone: (lowStock ? "warning" : "default") as Tone },
   ].filter((m) => can(m.path));
 
   const stageData = FLOW_STAGES.map((st) => ({
